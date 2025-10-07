@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-credential-issuance
+  labels:
+    app: kube-credential-issuance
+    component: backend
+    version: v1
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: kube-credential-issuance
+  template:
+    metadata:
+      labels:
+        app: kube-credential-issuance
+        component: backend
+        version: v1
+    spec:
+      containers:
+      - name: issuance-service
+        image: kube-credential-issuance:latest
+        ports:
+        - containerPort: 3001
+          name: http
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: PORT
+          value: "3001"
+        - name: FRONTEND_URL
+          value: "http://localhost:3000"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 3001
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        volumeMounts:
+        - name: data-storage
+          mountPath: /app/data
+      volumes:
+      - name: data-storage
+        emptyDir: {}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001

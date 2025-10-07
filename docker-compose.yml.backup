@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # Credential Issuance Service
+  issuance-service:
+    build:
+      context: ./backend/issuance-service
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - FRONTEND_URL=http://localhost:3000
+    volumes:
+      - issuance_data:/app/data
+    networks:
+      - kube-credential-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http=require('http'); const req=http.request({hostname:'localhost',port:3001,path:'/health'},res=>{process.exit(res.statusCode===200?0:1)}); req.on('error',()=>process.exit(1)); req.end();"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Credential Verification Service
+  verification-service:
+    build:
+      context: ./backend/verification-service
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - FRONTEND_URL=http://localhost:3000
+    networks:
+      - kube-credential-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "const http=require('http'); const req=http.request({hostname:'localhost',port:3002,path:'/health'},res=>{process.exit(res.statusCode===200?0:1)}); req.on('error',()=>process.exit(1)); req.end();"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      - issuance-service
+
+networks:
+  kube-credential-network:
+    driver: bridge
+
+volumes:
+  issuance_data:
+    driver: local
