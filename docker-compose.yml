@@ -1,4 +1,7 @@
-﻿services:
+# (you can remove this 'version' line to silence the warning)
+# version: '3.8'
+
+services:
   issuance-service:
     build:
       context: ./backend/issuance-service
@@ -8,7 +11,7 @@
     environment:
       NODE_ENV: production
       PORT: "3001"
-      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URL: https://kube-credential-git-main-mehul-sharmas-projects-13c5f667.vercel.app/ , http://localhost:3000
       VERIFICATION_BASE_URL: http://verification-service:3002
     volumes:
       - issuance_data:/app/data
@@ -16,7 +19,7 @@
       - kube-credential-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/health"]
+      test: ["CMD", "node", "-e", "const http=require('http'); const req=http.request({hostname:'localhost',port:3001,path:'/health'},res=>{process.exit(res.statusCode===200?0:1)}); req.on('error',()=>process.exit(1)); req.end();"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -31,13 +34,16 @@
     environment:
       NODE_ENV: production
       PORT: "3002"
-      FRONTEND_URL: http://localhost:3000
+      FRONTEND_URL: https://kube-credential-git-main-mehul-sharmas-projects-13c5f667.vercel.app/, http://localhost:3000
       ISSUANCE_BASE_URL: http://issuance-service:3001
+    # optional persistence for verification too:
+    # volumes:
+    #   - verification_data:/app/data
     networks:
       - kube-credential-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3002/health"]
+      test: ["CMD", "node", "-e", "const http=require('http'); const req=http.request({hostname:'localhost',port:3002,path:'/health'},res=>{process.exit(res.statusCode===200?0:1)}); req.on('error',()=>process.exit(1)); req.end();"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -52,3 +58,5 @@ networks:
 volumes:
   issuance_data:
     driver: local
+  # verification_data:
+  #   driver: local
