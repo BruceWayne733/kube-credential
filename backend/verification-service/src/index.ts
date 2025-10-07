@@ -10,10 +10,31 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 const app = express();
 
 app.use(helmet());
+
+// Comma-separated list of explicit origins; default keeps localhost working
+const ORIGINS = (process.env.FRONTEND_ORIGINS || 'http://localhost:3000')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+// Allow any *.vercel.app (preview + prod)
+// If you prefer to lock it down, remove this and list exact domains in FRONTEND_ORIGINS.
+const vercelRegex = /\.vercel\.app$/;
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: (origin, cb) => {
+    // allow server-to-server tools (no Origin header)
+    if (!origin) return cb(null, true);
+
+    if (ORIGINS.includes(origin) || vercelRegex.test(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error(`CORS blocked: ${origin}`));
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 

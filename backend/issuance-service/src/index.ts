@@ -3,24 +3,80 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { CredentialRequest, CredentialResponse } from './types';
 import { CredentialStorage } from './storage';
-import axios from 'axios';
 
-const VERIFICATION_URL = process.env.VERIFICATION_BASE_URL || 'http://localhost:3002';  
+// ============================================================
+// CONFIGURATION
+// ============================================================
+const VERIFICATION_BASE_URL = (process.env.VERIFICATION_BASE_URL || '').trim() || 'http://verification-service:3002';
+console.log('[STARTUP] VERIFICATION_BASE_URL effective:', VERIFICATION_BASE_URL);
 
 const PORT = Number(process.env.PORT) || 3001;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
 const app = express();
 
+// ============================================================
+// MIDDLEWARE
+// ============================================================
 app.use(helmet());
+
+// Comma-separated list of explicit origins; default keeps localhost working
+const ORIGINS = (process.env.FRONTEND_ORIGINS || 'http://localhost:3000')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
+// Allow any *.vercel.app (preview + prod)
+// If you prefer to lock it down, remove this and list exact domains in FRONTEND_ORIGINS.
+const vercelRegex = /\.vercel\.app$/;
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
-  credentials: true
+  origin: (origin, cb) => {
+    // allow server-to-server tools (no Origin header)
+    if (!origin) return cb(null, true);
+
+    if (ORIGINS.includes(origin) || vercelRegex.test(origin)) {
+      return cb(null, true);
+    }
+    return cb(new Error(`CORS blocked: ${origin}`));
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
 }));
+
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 const storage = new CredentialStorage();
+
+// ============================================================
+// HELPER: Auto-sync credential to verification service
+// ============================================================
+async function syncToVerification(credential: any): Promise<void> {
+  const url = `${VERIFICATION_BASE_URL}/sync`;
+  try {
+    console.log(`[AUTO-SYNC] Syncing credential ${credential.id} to ${url}`);
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credentials: [credential] }),
+    });
+    
+    const text = await response.text();
+    console.log(`[AUTO-SYNC] -> ${url} status=${response.status} body=${text.substring(0, 200)}`);
+    
+    if (!response.ok) {
+      console.error(`[AUTO-SYNC] Failed with status ${response.status}: ${text}`);
+    }
+  } catch (error: any) {
+    console.error(`[AUTO-SYNC] Network error syncing to ${url}:`, error.message);
+  }
+}
+
+// ============================================================
+// ROUTES
+// ============================================================
 
 app.get('/health', (_req: Request, res: Response): Response => {
   return res.json({
@@ -31,7 +87,7 @@ app.get('/health', (_req: Request, res: Response): Response => {
   });
 });
 
-// ISSUE
+// POST /issue - Issue new credential and auto-sync
 app.post('/issue', async (req: Request, res: Response): Promise<void> => {
   try {
     const credentialRequest: CredentialRequest = req.body;
@@ -60,13 +116,10 @@ app.post('/issue', async (req: Request, res: Response): Promise<void> => {
     const workerId = storage.getNextWorkerId();
     const credential = await storage.issueCredential(credentialRequest.data, workerId);
 
-    (async () => {
-    try {
-      await axios.post(`${VERIFICATION_URL}/sync`, { credentials: [credential] });
-    } catch (e: any) {
-     console.warn('Sync to verification failed (non-blocking):', e?.message || e);
-    }
-    })();
+    // *** AUTO-SYNC: Fire and forget - non-blocking ***
+    syncToVerification(credential).catch(err => {
+      console.error('[AUTO-SYNC] Unhandled promise rejection:', err);
+    });
 
     const response: CredentialResponse = {
       success: true,
@@ -88,7 +141,7 @@ app.post('/issue', async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// GET BY ID
+// GET /credential/:id - Get credential by ID
 app.get('/credential/:id', async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
@@ -124,7 +177,7 @@ app.get('/credential/:id', async (req: Request, res: Response): Promise<void> =>
   }
 });
 
-// GET ALL
+// GET /credentials - Get all credentials
 app.get('/credentials', async (_req: Request, res: Response): Promise<void> => {
   try {
     const credentials = await storage.getAllCredentials();
@@ -144,12 +197,15 @@ app.get('/credentials', async (_req: Request, res: Response): Promise<void> => {
   }
 });
 
-// ...rest of your file (signals, startServer, etc.) stays the same
+// ============================================================
+// SERVER STARTUP & SIGNAL HANDLING
+// ============================================================
 
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, shutting down gracefully');
   process.exit(0);
 });
+
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully');
   process.exit(0);
@@ -174,6 +230,7 @@ process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
   process.exit(1);
 });
+
 process.on('unhandledRejection', (reason, promise) => {
   console.error('Unhandled Rejection at:', promise, 'reason:', reason);
   process.exit(1);
