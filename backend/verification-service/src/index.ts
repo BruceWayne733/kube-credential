@@ -9,15 +9,10 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 const app = express();
 
-app.use(helmet());
-
-
-// Allow any *.vercel.app (preview + prod)
-// If you prefer to lock it down, remove this and list exact domains in FRONTEND_ORIGINS.
 // ============================================================
 // MIDDLEWARE
 // ============================================================
-app.use(helmet());
+app.use(helmet()); // Only once!
 
 // Comma-separated list of explicit origins
 const ORIGINS = (process.env.FRONTEND_ORIGINS || 'http://localhost:3000')
@@ -27,7 +22,7 @@ const ORIGINS = (process.env.FRONTEND_ORIGINS || 'http://localhost:3000')
 
 console.log('[CORS] Allowed origins:', ORIGINS);
 
-// Allow any *.vercel.app domain
+// Allow any *.vercel.app domain (including preview URLs with hyphens)
 const vercelRegex = /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/;
 
 app.use(cors({
@@ -60,6 +55,8 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// ... rest of your code stays the same
 
 const storage = new VerificationStorage();
 
