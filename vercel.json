@@ -1,6 +1,10 @@
 ﻿{
   "version": 2,
-  "buildCommand": "cd frontend && npm ci && npm run build",
+  "installCommand": "cd frontend && npm ci",
+  "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/build",
-  "installCommand": "cd frontend && npm ci"
+  "rewrites": [
+    { "source": "/api/issuance/:path*", "destination": "https://fuzzy-feet-repair.loca.lt/:path*" },
+    { "source": "/api/verification/:path*", "destination": "https://fluffy-boats-study.loca.lt/:path*" }
+  ]
 }
