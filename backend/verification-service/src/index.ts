@@ -11,11 +11,6 @@ const app = express();
 
 app.use(helmet());
 
-// Comma-separated list of explicit origins; default keeps localhost working
-const ORIGINS = (process.env.FRONTEND_ORIGINS || 'http://localhost:3000')
-  .split(',')
-  .map(s => s.trim())
-  .filter(Boolean);
 
 // Allow any *.vercel.app (preview + prod)
 // If you prefer to lock it down, remove this and list exact domains in FRONTEND_ORIGINS.
