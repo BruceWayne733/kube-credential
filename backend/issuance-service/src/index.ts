@@ -20,30 +20,44 @@ const app = express();
 // ============================================================
 app.use(helmet());
 
-// Comma-separated list of explicit origins; default keeps localhost working
+// Comma-separated list of explicit origins
 const ORIGINS = (process.env.FRONTEND_ORIGINS || 'http://localhost:3000')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
 
-// Allow any *.vercel.app (preview + prod)
-// If you prefer to lock it down, remove this and list exact domains in FRONTEND_ORIGINS.
-const vercelRegex = /\.vercel\.app$/;
+console.log('[CORS] Allowed origins:', ORIGINS);
+
+// Allow any *.vercel.app domain
+const vercelRegex = /^https:\/\/[a-zA-Z0-9-]+\.vercel\.app$/;
 
 app.use(cors({
   origin: (origin, cb) => {
-    // allow server-to-server tools (no Origin header)
-    if (!origin) return cb(null, true);
-
-    if (ORIGINS.includes(origin) || vercelRegex.test(origin)) {
+    // Allow requests with no origin (Postman, curl, server-to-server)
+    if (!origin) {
+      console.log('[CORS] Allowed: No origin header');
       return cb(null, true);
     }
-    return cb(new Error(`CORS blocked: ${origin}`));
+
+    // Check explicit origins
+    if (ORIGINS.includes(origin)) {
+      console.log('[CORS] Allowed: Explicit origin', origin);
+      return cb(null, true);
+    }
+
+    // Check Vercel domains
+    if (vercelRegex.test(origin)) {
+      console.log('[CORS] Allowed: Vercel domain', origin);
+      return cb(null, true);
+    }
+
+    // Block everything else
+    console.error('[CORS] BLOCKED:', origin);
+    return cb(new Error(`CORS blocked: ${origin}`), false);
   },
   credentials: true,
   optionsSuccessStatus: 200,
 }));
-
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
